@@ -38,7 +38,7 @@ def compute_gamma_scale(X):
     return 1.0 / (d * var + 1e-12)
 
 
-def build_joint_embedding(X, y, problem, gamma_x=None, gamma_y=None):
+def build_joint_embedding(X, y, problem, gamma_x=None, gamma_y=None, n_components=50):
     """
     Builds joint embedding φ(X)ψ(y).
 
@@ -54,7 +54,7 @@ def build_joint_embedding(X, y, problem, gamma_x=None, gamma_y=None):
     """
     if gamma_x is None:
         gamma_x = compute_gamma_scale(X)
-    phi = RBFSampler(gamma=gamma_x, n_components=200, random_state=42)
+    phi = RBFSampler(gamma=gamma_x, n_components=n_components, random_state=42)
     phi_X = lambda _X: phi.fit_transform(_X)
 
     if problem == "classification":
@@ -65,7 +65,7 @@ def build_joint_embedding(X, y, problem, gamma_x=None, gamma_y=None):
         y = y.reshape(-1, 1)
         if gamma_y is None:
             gamma_y = compute_gamma_scale(y)
-        psi = RBFSampler(gamma=gamma_y, n_components=200, random_state=42)
+        psi = RBFSampler(gamma=gamma_y, n_components=n_components, random_state=42)
         psi_y = lambda _y: psi.fit_transform(_y)
 
     else:

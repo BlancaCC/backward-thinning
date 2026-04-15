@@ -1,5 +1,7 @@
 import numpy as np
 from itertools import combinations
+from collections import defaultdict
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -110,7 +112,34 @@ class WeightedBackwardThinning:
     # ------------------------------------------------------------------
     # Step 0 – Fit: compute mean embeddings
     # ------------------------------------------------------------------
+  
+    def _remove_opposite_vectors(self, V, index_to_keep, eps):
+        table = EpsilonHashTable(eps)
 
+        to_remove = set()
+        pairs = {}
+
+        for i in index_to_keep:
+            if not i in to_remove:
+                v = V[i]
+
+                # buscar vector opuesto
+                result = table.lookup(-v)
+
+                if result is not None:
+                    stored_v, group = result
+
+                    j = group  # aquí guardamos el índice
+                    to_remove.add(i)
+                    pairs[j] = i
+                else:
+                    # guardamos índice como "group"
+                    table.insert(v, i)
+
+        new_index_to_keep = [i for i in index_to_keep if i not in to_remove]
+
+        return new_index_to_keep, pairs
+    
     def fit(self, X: np.ndarray, y):
         """
         Compute mean embedding(s) over the full dataset.
@@ -135,6 +164,34 @@ class WeightedBackwardThinning:
     # Step 1 – Transform: backward thinning + weight redistribution
     # ------------------------------------------------------------------
 
+    def redistribute_weights(self,weights, S, index_to_keep, index_to_remove, alpha):
+        """
+        Implementa exactamente:
+        w_i <- sum_r w_r * k_ir^alpha / sum_j k_jr^alpha + w_i
+        """
+
+        if len(index_to_remove) == 0:
+            return weights
+
+        W_removed = weights[index_to_remove]  # (m,)
+
+        # Submatriz correcta (índices locales coherentes)
+        K = S[np.ix_(index_to_keep, index_to_remove)] ** alpha  # (n_keep, m)
+
+        # Normalización por columna (por cada r)
+        denom = K.sum(axis=0)
+        denom[denom == 0] = 1.0  # evitar división por cero
+
+        K_normalized = K / denom
+
+        # Redistribución
+        weights[index_to_keep] += K_normalized @ W_removed
+
+        # Eliminar peso de los removidos
+        weights[index_to_remove] = 0.0
+
+        return weights
+    
     def transform(self, X: np.ndarray, y):
         """
         Run the backward thinning algorithm and return the coreset.
@@ -154,121 +211,28 @@ class WeightedBackwardThinning:
 
         n = len(X)
         lifted_X = self._lifted_X          # (n, d)
-        mu_p = self.mu_px_                 # (d,)
-        m = self.depth
         eps = self.mmd_tolerance
 
         # Initial uniform weights
         weights = np.ones(n) / n
 
         # assumpt only quit one 
-
-        distances = np.linalg.norm(self._lifted_X - self.mu_px_[np.newaxis, :], axis=1)
+        V = self._lifted_X - self.mu_px_[np.newaxis, :]  # (n, d)
+        distances = np.linalg.norm(V, axis=1)
         print(f"Distances to mean embedding: {min(distances):.4f} to {max(distances):.4f}")
-        index_to_remove = np.where(distances <= eps)[0]
         index_to_keep = np.where(distances > eps)[0]
+        print(f"Initial points kept after distance check m=1: {len(index_to_keep)}/{n}")
+
         
+        # m = 2
+        index_to_keep, _ = self._remove_opposite_vectors(V, index_to_keep, self.mmd_tolerance)
+        index_to_remove = np.setdiff1d(np.arange(n), index_to_keep)
+        print(f"Points kept after m=2: {len(index_to_keep)}/{n}")
+        S = np.abs(lifted_X @ lifted_X.T)  # (n_keep, n_remove) # hay que hacer el abs porque puede haber valores negativos que den lugar a pesos negativos, por la apoximación d
+        weights_to_keep = self.redistribute_weights(weights, S, index_to_keep, index_to_remove, self.alpha)
+        print(f"Weights after redistribution ({1/n}): {min(weights_to_keep):.6f} to {max(weights_to_keep):.6f} sum={weights_to_keep.sum():.6f}")
+        return X[index_to_keep], weights_to_keep, index_to_keep
 
-        # Compute weights for the remaining points (those not removed)
-        S = lifted_X[index_to_keep]  @ lifted_X[index_to_remove].T  # (m', |R|)
-        S_col_normalized = S / np.linalg.norm(S, axis=0, keepdims=True)  # Normalize columns
-        
-
-        if len(index_to_remove) > 0:
-            weights[index_to_keep] += S_col_normalized @ weights[index_to_remove].T  # Redistribute weights
-            weights[index_to_keep] /= weights[index_to_keep].sum()  # Normalize weights
-            weights[index_to_remove] = 0.0  # Ensure removed points have zero weight
-
-        return X[index_to_keep], weights[index_to_keep]
-
-        # # ── Step 2 – Combinatorial Tree Population ─────────────────────
-        # print('Inicio paso 1')
-        # T = EpsilonHashTable(epsilon=eps)   # stores V_S vectors
-        # G: dict[int, set] = {}              # id(stored_V) → set of point indices
-
-        # for subset_idx in combinations(range(n), m):
-        #     subset_idx = list(subset_idx)
-        #     phi_sum = lifted_X[subset_idx].sum(axis=0)   # Σ Φ(x_j)
-
-        #     # V_S = −((m−1)·μ̂_P − Σ Φ(x_j))
-        #     #      = Σ Φ(x_j) − (m−1)·μ̂_P
-        #     V_S = phi_sum - (m - 1) * mu_p
-
-        #     # Insert only if novel within tolerance ε
-        #     if V_S not in T:
-        #         T.insert(V_S, group=set(subset_idx))
-        #         # Record via the object id of the just-inserted vector
-        #         # We retrieve it immediately to grab the stored reference.
-        #         stored = T.lookup(V_S)
-        #         if stored is not None:
-        #             stored_v, stored_group = stored
-        #             stored_group.update(subset_idx)
-        # # ── Step 3 – Find removable set R ──────────────────────────────
-        # R: set[int] = set()
-
-        # for i in range(n):
-        #     # Check if μ̂_P − Φ(x_i) ∈ T_ε
-        #     query = mu_p - lifted_X[i]
-        #     result = T.lookup(query)
-        #     if result is not None:
-        #         _, group = result
-        #         R.add(i)
-        #         R.update(group)
-
-        # # ── Step 4 – Define X_final ─────────────────────────────────────
-        # final_mask = np.ones(n, dtype=bool)
-        # final_mask[list(R)] = False
-        # final_indices = np.where(final_mask)[0]
-        # removed_indices = np.where(~final_mask)[0]
-
-        # # Edge-case: if everything is removed keep the full dataset
-        # if len(final_indices) == 0:
-        #     final_indices = np.arange(n)
-        #     removed_indices = np.array([], dtype=int)
-
-        # # ── Step 5 – Kernel-based Heuristic Weighting ──────────────────
-        # Phi_final = lifted_X[final_indices]    # (m', d)
-        # m_prime = len(final_indices)
-
-        # # Inner-product kernel matrix K[i,j] = <Φ(x_i), Φ(x_j)>
-        # K_ff = Phi_final @ Phi_final.T         # (m', m')
-
-        # # s_i = Σ_{x_j ∈ X_final} <Φ(x_i), Φ(x_j)>
-        # # (not used directly in weight update but available for diagnostics)
-        # s = K_ff.sum(axis=1)                   # (m',)
-
-        # # Kernel between final points and removed points
-        # Phi_removed = lifted_X[removed_indices]  # (|R|, d)
-        # w_final = weights[final_indices].copy()
-        # alpha = self.alpha
-
-        # if len(removed_indices) > 0:
-        #     K_fr = Phi_final @ Phi_removed.T       # (m', |R|)
-
-        #     # For each removed point r, redistribute w_r to final points
-        #     # proportionally to k_{ir}^α / Σ_{j∈X_final} k_{jr}^α
-        #     K_fr_alpha = np.abs(K_fr) ** alpha     # (m', |R|)
-        #     col_sums = K_fr_alpha.sum(axis=0)      # (|R|,)
-
-        #     # Avoid division by zero
-        #     safe_sums = np.where(col_sums > 0, col_sums, 1.0)
-
-        #     # w_i += Σ_{r∈R} w_r * k_{ir}^α / Σ_{j} k_{jr}^α
-        #     w_removed = weights[removed_indices]   # (|R|,)
-        #     delta = (K_fr_alpha / safe_sums) @ w_removed   # (m',)
-        #     w_final = w_final + delta
-
-        # # Normalise so weights sum to 1 (preserves probability interpretation)
-        # w_sum = w_final.sum()
-        # if w_sum > 0:
-        #     w_final = w_final / w_sum
-
-        # ── Store and return ───────────────────────────────────────────
-        self.coreset_indices_ = final_indices
-        self.removed_indices_ = removed_indices
-        self.weights_ = w_final
-
-        return X[final_indices], w_final
 
     # ------------------------------------------------------------------
     # Convenience: fit + transform in one call
