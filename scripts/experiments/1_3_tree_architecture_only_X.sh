@@ -23,7 +23,7 @@ task_id=3
 experiment="1_3_tree_architecture_only_X"
 path_to_save="results/$experiment/"
 version="test_t10"
-max_removals=2
+max_removals=1
 
 args=(
     "--task_id" "$task_id"

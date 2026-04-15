@@ -22,7 +22,7 @@ problem_type="classification"
 task_id=3
 experiment="1_2_tree_architecture"
 path_to_save="results/$experiment/"
-version="test_t1"
+version="test_t7_from_X"
 max_removals=2
 
 args=(
@@ -31,7 +31,7 @@ args=(
     "--version" "$version"
     "--problem_type" "$problem_type"
     "--max_removals" "$max_removals"
-    "--tree_depth" "1"
+    "--tree_depth" "7"
 )
 
 # Note: Removed --experiment because your help output shows 
