@@ -20,16 +20,16 @@ problem_types=("classification" "regression")
 problem_type="classification"
 
 task_id=3
-experiment="2_2_iterative_1_step"
-version="version_1_supervised"
+experiment="2_3_iterative_1_step_with_regression"
+version="version_0"
 path_to_save="results/$experiment/$version"
 
 target_size_percentage=70
 
 problem_types=("classification" "regression")
-problem_types=("classification")
+problem_types=("regression")  # Solo regresión para este experimento
 
-for task_id in {3..10}; do
+for task_id in {1..10}; do
     for problem_type in "${problem_types[@]}"; do
         echo "🚀 Running task_id: $task_id, problem_type: $problem_type..."
         args=(
@@ -43,6 +43,6 @@ for task_id in {3..10}; do
         # Note: Removed --experiment because your help output shows 
         # that the script doesn't actually accept a --experiment flag.
 
-        python -m experiments.2_weighted_backward_thinning.2_2_iterative_1_step "${args[@]}" &
+        python -m experiments.2_weighted_backward_thinning.2_3_iterative_1_step_with_regression "${args[@]}" &
     done
 done

@@ -1,1 +1,5 @@
 from .BackwardThinning import BackwardThinning
+from .WeightedBackwardThinning import WeightedBackwardThinning
+from .IterativeWeightedBackwardThinning import IterativeWeightedBackwardThinning
+from .kernel_herding import kernel_herding
+from .KernelThinning import KernelThinning

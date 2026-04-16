@@ -51,47 +51,48 @@ class IterativeWeightedBackwardThinning:
         Phi_x = self._lifted_X.copy()
         Phi_y = self._lifted_y.copy() if self._lifted_y is not None else None
 
-        print(f"Iniciando reducción iterativa de {n} a {self.target_size} puntos...")
-
         while len(indices_activos) > self.target_size:
             # 1. Calcular la media pesada actual
             # mu_w = sum(w_i * phi_i)
-            mu_w = np.sum(Phi_x[indices_activos] * weights[indices_activos][:, np.newaxis], axis=0)
-            mu_w_y = np.sum(Phi_y[indices_activos] * weights[indices_activos][:, np.newaxis], axis=0) if Phi_y is not None else None
-
+            
+            mu_w = np.mean(Phi_x[indices_activos], axis=0)
             # 2. Identificar el punto con "menor gradiente" (más cercano a la media)
             # Calculamos la norma de la diferencia entre cada punto activo y la media
             diffs_x = Phi_x[indices_activos] - mu_w
-            diff_y = (Phi_y[indices_activos] - mu_w_y) if Phi_y is not None else 0
-            distancias = np.linalg.norm(diffs_x, axis=1) + (np.linalg.norm(diff_y, axis=1) if Phi_y is not None else 0)
-            
+            distancias = np.linalg.norm(diffs_x, axis=1) 
+            if Phi_y is not None:
+                mu_w_y = np.mean(Phi_y[indices_activos], axis=0)
+                diff_y = (Phi_y[indices_activos] - mu_w_y) 
+                distancias += np.linalg.norm(diff_y, axis=1)  # Combinamos distancias de X e y
+
+
             # Índice local (dentro de indices_activos) del punto a eliminar
             idx_local_remove = np.argmin(distancias)
             idx_global_remove = indices_activos.pop(idx_local_remove)
             
             # 3. Redistribuir el peso del punto eliminado
-            w_r = weights[idx_global_remove]
-            if w_r > 0:
-                # Calculamos el kernel entre los que se quedan (i) y el que se va (r)
-                # k_ir = <phi_i, phi_r>
-                phi_r = Phi_x[idx_global_remove]
-                phi_y_r = Phi_y[idx_global_remove] if Phi_y is not None else None
-                phi_activos = Phi_x[indices_activos]
-                phi_y_activos = Phi_y[indices_activos] if Phi_y is not None else None
+            # w_r = weights[idx_global_remove]
+            # if w_r > 0:
+            #     # Calculamos el kernel entre los que se quedan (i) y el que se va (r)
+            #     # k_ir = <phi_i, phi_r>
+            #     phi_r = Phi_x[idx_global_remove]
+            #     phi_y_r = Phi_y[idx_global_remove] if Phi_y is not None else None
+            #     phi_activos = Phi_x[indices_activos]
+            #     phi_y_activos = Phi_y[indices_activos] if Phi_y is not None else None
                 
-                # Aplicamos la fórmula: w_i = w_i + w_r * (k_ir^alpha / sum(k_jr^alpha))
-                kx_ir = (phi_activos @ phi_r) ** self.alpha
-                ky_ir = (phi_y_activos @ phi_y_r) ** self.alpha if Phi_y is not None else 0
-                k_ir = kx_ir * ky_ir  if Phi_y is not None else kx_ir  # Si no hay y, solo usamos el kernel de X
-                # Evitar división por cero si el kernel es muy pequeño
-                denom = np.sum(k_ir)
-                if abs(denom) > 1e-12:
-                    weights[indices_activos] += w_r * (k_ir / denom)
-                else:
-                    # Si falla el kernel, redistribución uniforme simple
-                    weights[indices_activos] += w_r / len(indices_activos)
+            #     # Aplicamos la fórmula: w_i = w_i + w_r * (k_ir^alpha / sum(k_jr^alpha))
+            #     kx_ir = (phi_activos @ phi_r) ** self.alpha
+            #     ky_ir = (phi_y_activos @ phi_y_r) ** self.alpha if Phi_y is not None else 0
+            #     k_ir = kx_ir * ky_ir  if Phi_y is not None else kx_ir  # Si no hay y, solo usamos el kernel de X
+            #     # Evitar división por cero si el kernel es muy pequeño
+            #     denom = np.sum(k_ir)
+            #     if abs(denom) > 1e-12:
+            #         weights[indices_activos] += w_r * (k_ir / denom)
+            #     else:
+            #         # Si falla el kernel, redistribución uniforme simple
+            #         weights[indices_activos] += w_r / len(indices_activos)
 
-            weights[idx_global_remove] = 0.0
+            # weights[idx_global_remove] = 0.0
 
         # Resultados finales
         self.coreset_indices_ = np.array(indices_activos)

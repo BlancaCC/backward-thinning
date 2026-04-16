@@ -3,7 +3,7 @@ from time import perf_counter
 import numpy as np
 import os
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
+from sklearn.svm import SVC, SVR
 from sklearn.kernel_approximation import Nystroem
 from subsampling_models import IterativeWeightedBackwardThinning, kernel_herding, KernelThinning
 
@@ -24,9 +24,27 @@ def main():
   
     args = parser.parse_args()
 
+    # Selección de modelo según tipo de problema
+    if args.problem_type == 'classification':
+        ml_model = SVC
+        model_params = {
+            'kernel': 'rbf'
+        }
+    else:
+        # Heurística para epsilon: 0.1 * std de y_train (se ajusta más abajo tras split)
+        ml_model = SVR
+        model_params = {
+            'kernel': 'rbf'
+        }
+
     # 1. Carga de datos
     X, y, dataset_name, task_id = get_data(args.problem_type, args.task_id)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
+
+    # Ajuste de epsilon para regresión basado en los datos
+    if args.problem_type == 'regression':
+        epsilon = 0.1 * np.std(y_train)
+        model_params['epsilon'] = epsilon
     
     # 2. Construcción del embedding (mapeo de características)
     # Nota: phi_X suele ser una función o un objeto que proyecta los datos
@@ -55,9 +73,9 @@ def main():
 
     # 4. Evaluación: SVC con Coreset (Sin Pesos)
     gamma = compute_gamma_scale(coreset_X)
-    clf = SVC(kernel='rbf', gamma=gamma)
-    clf.fit(coreset_X, coreset_y)
-    acc = clf.score(X_test, y_test)
+    clf = ml_model(gamma=gamma, **model_params)
+    clf.fit(coreset_X, coreset_y.ravel())  # Aseguramos que coreset_y sea un vector 1D
+    acc = clf.score(X_test, y_test.ravel())
     print(f"Accuracy (Coreset sin pesos): {acc:.4f} en {time_coreset_backward:.2f} segundos.")
 
     # # 5. Evaluación: SVC con Coreset (CON PESOS redistribuidos)
@@ -67,16 +85,16 @@ def main():
     # print(f"Accuracy (Coreset con pesos): {acc_weighted:.4f} en {time_coreset_backward:.2f} segundos.")
 
     # 6. Evaluación: Full Dataset (Baseline)
-    clf_full = SVC(kernel='rbf', gamma=gamma)
-    clf_full.fit(X_train, y_train)
-    acc_full = clf_full.score(X_test, y_test)
+    clf_full = ml_model(gamma=gamma, **model_params)
+    clf_full.fit(X_train, y_train.ravel())
+    acc_full = clf_full.score(X_test, y_test.ravel())
     print(f"Accuracy (Full data): {acc_full:.4f}")
 
     # 7. Evaluación: Random Subset (Baseline)
     random_indices = np.random.choice(len(X_train), size=len(coreset_X), replace=False)
-    clf_random = SVC(kernel='rbf', gamma=gamma)
-    clf_random.fit(X_train[random_indices], y_train[random_indices])
-    acc_random = clf_random.score(X_test, y_test)
+    clf_random = ml_model(gamma=gamma, **model_params)
+    clf_random.fit(X_train[random_indices], y_train[random_indices].ravel())
+    acc_random = clf_random.score(X_test, y_test.ravel())
     print(f"Accuracy (Random subset): {acc_random:.4f}")
 
     # 8. Evaluación: Nystroem Approximation
@@ -86,9 +104,12 @@ def main():
     X_test_nys = nystroem.transform(X_test)
     time_nystroem = perf_counter()  - time_start
     
-    clf_nys = SVC(kernel='linear') # Nystroem linealiza el kernel rbf
-    clf_nys.fit(X_train_nys, y_train)
-    acc_nystroem = clf_nys.score(X_test_nys, y_test)
+    if args.problem_type == 'classification':
+        clf_nys = SVC(kernel='linear')
+    else:
+        clf_nys = SVR(kernel='linear', epsilon=model_params.get('epsilon', 0.1))
+    clf_nys.fit(X_train_nys, y_train.ravel())
+    acc_nystroem = clf_nys.score(X_test_nys, y_test.ravel())
     print(f"Accuracy (Nystroem full): {acc_nystroem:.4f} en {time_nystroem:.2f} segundos.")
 
     # 9 Evaluación de Kernel Herding (Baseline)
@@ -101,9 +122,9 @@ def main():
     coreset_X_herding = X_train[index]
     coreset_y_herding = y_train[index]
     time_herding = perf_counter()  - time_start
-    clf_herding = SVC(kernel='rbf', gamma=gamma)
-    clf_herding.fit(coreset_X_herding, coreset_y_herding)
-    acc_herding = clf_herding.score(X_test, y_test)
+    clf_herding = ml_model(gamma=gamma, **model_params)
+    clf_herding.fit(coreset_X_herding, coreset_y_herding.ravel())
+    acc_herding = clf_herding.score(X_test, y_test.ravel())
     print(f"Accuracy (Kernel Herding): {acc_herding:.4f} en {time_herding:.2f} segundos.")
 
     # 10. Evaluación de Kernel Thinning (Baseline)
@@ -115,9 +136,9 @@ def main():
     coreset_y_thinning = y_train[coreset_indices_thinning]  
     time_thinning = perf_counter()  - time_start
 
-    clf_thinning = SVC(kernel='rbf', gamma=gamma)
-    clf_thinning.fit(coreset_X_thinning, coreset_y_thinning)
-    acc_thinning = clf_thinning.score(X_test, y_test)
+    clf_thinning = ml_model(gamma=gamma, **model_params)
+    clf_thinning.fit(coreset_X_thinning, coreset_y_thinning.ravel())
+    acc_thinning = clf_thinning.score(X_test, y_test.ravel())
     print(f"Accuracy (Kernel Thinning): {acc_thinning:.4f} en {time_thinning:.2f} segundos.")
 
     # 9. Guardar Resultados
@@ -126,7 +147,7 @@ def main():
         'task_id': task_id,
         'coreset_size': len(coreset_X),
         'accuracy_coreset': acc,
-        'accuracy_weighted_coreset': acc_weighted,
+        #'accuracy_weighted_coreset': acc_weighted,
         'accuracy_full': acc_full,
         'accuracy_random': acc_random,
         'accuracy_nystroem': acc_nystroem,
@@ -138,13 +159,14 @@ def main():
         'time_thinning': time_thinning
     }
     
-    os.makedirs(f"{args.path_to_save}/{args.version}", exist_ok=True)
+    os.makedirs(f"{args.path_to_save}", exist_ok=True)
     file_name = f"{args.task_id}_results.csv"
-    save_path = os.path.join(args.path_to_save, args.version, file_name)
     
     # Asegúrate de que save_data_to_csv maneje la creación del archivo
-    save_data_to_csv(directory_path=args.path_to_save, file_name=file_name, data=results)
-    print(f"Resultados guardados en {save_path}")
+    save_path = os.path.join(args.path_to_save)
+
+    save_data_to_csv(directory_path=save_path, file_name=file_name, data=results)
+    print(f"Resultados guardados en {save_path}/{file_name}")
 
 if __name__ == "__main__":
     main()

@@ -32,8 +32,8 @@ def get_data(problem, index, verbose=True):
         suit_id = 99
         max_index = 72
     elif problem == 'regression':
-        suit_id = 100
-        max_index = 30
+        suit_id = 353
+        max_index = 35
     else:
         raise ValueError("Problem type must be 'classification' or 'regression'.")
     
@@ -118,6 +118,9 @@ def get_data(problem, index, verbose=True):
         y_processed = y_raw.values.astype(float)
         if np.isnan(y_processed).any():
             y_processed = SimpleImputer(strategy='median').fit_transform(y_processed.reshape(-1, 1)).flatten()
+        # si hay varias columnas en y, se asume que es regresión multivariante y se deja como matriz 2D, de lo contrario se convierte a vector 1D
+        #evita que pase esto Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample.
+        y_processed = y_processed.astype(float).reshape(-1, 1)
         if verbose:
             print(f"📈 {dataset_name}: Regression.")
 
