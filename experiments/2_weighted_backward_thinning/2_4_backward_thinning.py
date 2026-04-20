@@ -5,7 +5,7 @@ import os
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC, SVR
 from sklearn.kernel_approximation import Nystroem
-from subsampling_models import IterativeWeightedBackwardThinning, kernel_herding, KernelThinning, BackwardThinning
+from subsampling_models import FastBackwardThinning, kernel_herding, KernelThinning, BackwardThinning
 
 # Asumo que importas la nueva clase desde donde la hayas guardado
 # from subsampling_models import IterativeWeightedBackwardThinning 
@@ -36,7 +36,7 @@ def main():
         model_params = {
             'kernel': 'rbf'
         }
-
+    metric = 'accuracy' if args.problem_type == 'classification' else 'r2'
     # 1. Carga de datos
     X, y, dataset_name, task_id = get_data(args.problem_type, args.task_id)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
@@ -54,48 +54,58 @@ def main():
     # 3. Inicialización y ejecución del algoritmo iterativo
     # Pasamos phi_X como el feature_map que el algoritmo usará internamente
     
-    model = IterativeWeightedBackwardThinning(
+    model = BackwardThinning(
         feature_map_X=phi_X,
-        feature_map_y=psi_y,
-        target_size=int(args.target_size*len(X_train) // 100),  # Convertimos porcentaje a número absoluto
-        alpha=args.alpha
+        feature_map_y=psi_y
     )
-    
     print(f"Calculando coreset iterativo para {dataset_name}...")
+    num_to_remove = len(X_train) - int(args.target_size*len(X_train) // 100)  # Convertimos porcentaje a número absoluto
     time_start = perf_counter() 
-    model.fit(X_train, y_train)
-    coreset_X,coreset_y, coreset_w = model.transform(X_train, y_train)
+    coreset_X,coreset_y = model.thin(num_to_remove, X=X_train, Y=y_train)  # Convertimos porcentaje a número absoluto
     time_coreset_backward = perf_counter()  - time_start
     print(f"Coreset iterativo calculado en {time_coreset_backward:.2f} segundos.")
 
     # Obtenemos los índices originales para recuperar las etiquetas y correspondencias
-    print(f"Coreset seleccionado: {len(coreset_X)} puntos.")
+     # 4. Evaluación: SVC con Coreset (Sin Pesos)
+    gamma = compute_gamma_scale(coreset_X)
+    clf = ml_model(gamma=gamma, **model_params)
+    clf.fit(coreset_X, coreset_y.ravel())  # Aseguramos que coreset_y sea un vector 1D
+    acc_backward_thinning = clf.score(X_test, y_test.ravel())
+    print(f"{metric} backward thinning: {acc_backward_thinning:.4f} en {time_coreset_backward:.2f} segundos.")
+
+
+    model = FastBackwardThinning(
+        feature_map_X=phi_X,
+        feature_map_y=psi_y
+    )
+    print(f"Calculando coreset iterativo para {dataset_name}...")
+    num_to_remove = len(X_train) - int(args.target_size*len(X_train) // 100)  # Convertimos porcentaje a número absoluto
+    time_start = perf_counter() 
+    coreset_X,coreset_y = model.thin(num_to_remove, X=X_train, Y=y_train)  # Convertimos porcentaje a número absoluto
+    time_coreset_fast_backward = perf_counter()  - time_start
+
+    # Obtenemos los índices originales para recuperar las etiquetas y correspondencias
 
     # 4. Evaluación: SVC con Coreset (Sin Pesos)
     gamma = compute_gamma_scale(coreset_X)
     clf = ml_model(gamma=gamma, **model_params)
     clf.fit(coreset_X, coreset_y.ravel())  # Aseguramos que coreset_y sea un vector 1D
-    acc = clf.score(X_test, y_test.ravel())
-    print(f"Accuracy (Coreset sin pesos): {acc:.4f} en {time_coreset_backward:.2f} segundos.")
+    acc_fast_backward = clf.score(X_test, y_test.ravel())
+    print(f"{metric} fast backward thinning: {acc_fast_backward:.4f} en {time_coreset_fast_backward:.2f} segundos.")
 
-    # # 5. Evaluación: SVC con Coreset (CON PESOS redistribuidos)
-    # clf_weighted = SVC(kernel='rbf', gamma=gamma)
-    # clf_weighted.fit(coreset_X, coreset_y, sample_weight=coreset_w)
-    # acc_weighted = clf_weighted.score(X_test, y_test)
-    # print(f"Accuracy (Coreset con pesos): {acc_weighted:.4f} en {time_coreset_backward:.2f} segundos.")
 
     # 6. Evaluación: Full Dataset (Baseline)
     clf_full = ml_model(gamma=gamma, **model_params)
     clf_full.fit(X_train, y_train.ravel())
     acc_full = clf_full.score(X_test, y_test.ravel())
-    print(f"Accuracy (Full data): {acc_full:.4f}")
+    print(f"{metric} (Full data): {acc_full:.4f}")
 
     # 7. Evaluación: Random Subset (Baseline)
     random_indices = np.random.choice(len(X_train), size=len(coreset_X), replace=False)
     clf_random = ml_model(gamma=gamma, **model_params)
     clf_random.fit(X_train[random_indices], y_train[random_indices].ravel())
     acc_random = clf_random.score(X_test, y_test.ravel())
-    print(f"Accuracy (Random subset): {acc_random:.4f}")
+    print(f"{metric} (Random subset): {acc_random:.4f}")
 
     # 8. Evaluación: Nystroem Approximation
     time_start = perf_counter() 
@@ -110,7 +120,7 @@ def main():
         clf_nys = SVR(kernel='linear', epsilon=model_params.get('epsilon', 0.1))
     clf_nys.fit(X_train_nys, y_train.ravel())
     acc_nystroem = clf_nys.score(X_test_nys, y_test.ravel())
-    print(f"Accuracy (Nystroem full): {acc_nystroem:.4f} en {time_nystroem:.2f} segundos.")
+    print(f"{metric} (Nystroem full): {acc_nystroem:.4f} en {time_nystroem:.2f} segundos.")
 
     # 9 Evaluación de Kernel Herding (Baseline)
     time_start = perf_counter() 
@@ -125,7 +135,7 @@ def main():
     clf_herding = ml_model(gamma=gamma, **model_params)
     clf_herding.fit(coreset_X_herding, coreset_y_herding.ravel())
     acc_herding = clf_herding.score(X_test, y_test.ravel())
-    print(f"Accuracy (Kernel Herding): {acc_herding:.4f} en {time_herding:.2f} segundos.")
+    print(f"{metric} (Kernel Herding): {acc_herding:.4f} en {time_herding:.2f} segundos.")
 
     # 10. Evaluación de Kernel Thinning (Baseline)
     time_start = perf_counter() 
@@ -139,20 +149,21 @@ def main():
     clf_thinning = ml_model(gamma=gamma, **model_params)
     clf_thinning.fit(coreset_X_thinning, coreset_y_thinning.ravel())
     acc_thinning = clf_thinning.score(X_test, y_test.ravel())
-    print(f"Accuracy (Kernel Thinning): {acc_thinning:.4f} en {time_thinning:.2f} segundos.")
+    print(f"{metric} (Kernel Thinning): {acc_thinning:.4f} en {time_thinning:.2f} segundos.")
 
     # 9. Guardar Resultados
     results = {
         'dataset': dataset_name,
         'task_id': task_id,
         'coreset_size': len(coreset_X),
-        'accuracy_coreset': acc,
-        #'accuracy_weighted_coreset': acc_weighted,
-        'accuracy_full': acc_full,
-        'accuracy_random': acc_random,
-        'accuracy_nystroem': acc_nystroem,
-        'accuracy_herding': acc_herding,
-        'accuracy_thinning': acc_thinning,
+        'backward_thinning': acc_backward_thinning,
+        'fast_backward': acc_fast_backward,
+        #'weighted_coreset': acc_weighted,
+        'full': acc_full,
+        'random': acc_random,
+        'nystroem': acc_nystroem,
+        'herding': acc_herding,
+        'thinning': acc_thinning,
         'time_coreset': time_coreset_backward,
         'time_nystroem': time_nystroem,
         'time_herding': time_herding,
