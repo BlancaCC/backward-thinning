@@ -1,0 +1,2 @@
+dataset,task_id,coreset_size,backward_thinning,fast_backward,full,random,nystroem,herding,thinning,thinning_rff,time_coreset,time_nystroem,time_herding,time_thinning,time_thinning_rff
+mfeat-karhunen,16,500,0.976,0.975,0.981,0.977,0.976,0.971,0.98,0.98,0.1483960099867545,0.5186169960070401,0.07969482502085157,0.01757583097787574,1.927385282004252

@@ -6,7 +6,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC, SVR
 from sklearn.kernel_approximation import Nystroem
 from subsampling_models import FastBackwardThinning, kernel_herding, KernelThinning, BackwardThinning
+from subsampling_models.KernelThinningRff import make_gaussian_kernel, KernelThinningRff
 
+"""
+from subsampling_models.KernelThinningRff import make_gaussian_kernel, KernelThinningRff
+from subsampling_models.BackwardThinning_rm import BackwardThinning
+from subsampling_models.FastBackwardThinning import FastBackwardThinning
+from subsampling_models.KernelThinning import KernelThinning
+"""
 # Asumo que importas la nueva clase desde donde la hayas guardado
 # from subsampling_models import IterativeWeightedBackwardThinning 
 from utils import build_joint_embedding, save_data_to_csv, compute_gamma_scale
@@ -15,7 +22,7 @@ from datasets import get_data
 def main():
     parser = argparse.ArgumentParser(description="Prueba de Coreset Iterativo")
     parser.add_argument('--problem_type', type=str, choices=['classification', 'regression'], default='classification')
-    parser.add_argument('--task_id', type=int, default=0)
+    parser.add_argument('--task_id', type=int, default=1)
     parser.add_argument('--path_to_save', type=str, default='./results')
     parser.add_argument('--version', type=str, default='iterative_v1')
     # Nuevo argumento para el tamaño del coreset
@@ -151,6 +158,34 @@ def main():
     acc_thinning = clf_thinning.score(X_test, y_test.ravel())
     print(f"{metric} (Kernel Thinning): {acc_thinning:.4f} en {time_thinning:.2f} segundos.")
 
+    # 11. Evaluación de Kernel Thinning con RFF
+    # TODO: Casi todo esto probablemente deberia pasarse como args
+    bw = 1.0 
+    k_rt = make_gaussian_kernel(bw)
+    k_star = make_gaussian_kernel(bw * np.sqrt(2))
+    bw_y = 0.5 
+    k_y = make_gaussian_kernel(bw_y)
+
+
+    time_start = perf_counter() 
+    kt_rff = KernelThinningRff(
+        k_rt=k_rt,
+        phi_rt=phi_X,   
+        k_star=k_star,
+        k_y=k_y if args.problem_type == 'regression' else None,
+        phi_rt_y=psi_y   
+    )
+
+    m_halvings = int(np.log2(len(X_train) / args.target_size)) 
+    coreset_indices_thinning = kt_rff.thin(X_train, y=y_train if psi_y else None, m=m_halvings)
+
+    time_thinning_rff = perf_counter() - time_start
+
+    clf_thinning_rff = ml_model(gamma=gamma, **model_params)
+    clf_thinning_rff.fit(coreset_X_thinning, coreset_y_thinning.ravel())
+    acc_thinning_rff = clf_thinning_rff.score(X_test, y_test.ravel())
+    print(f"{metric} (Kernel Thinning con RFF): {acc_thinning_rff:.4f} en {time_thinning_rff:.2f} segundos.")
+
     # 9. Guardar Resultados
     results = {
         'dataset': dataset_name,
@@ -164,10 +199,12 @@ def main():
         'nystroem': acc_nystroem,
         'herding': acc_herding,
         'thinning': acc_thinning,
+        'thinning_rff': acc_thinning_rff,
         'time_coreset': time_coreset_backward,
         'time_nystroem': time_nystroem,
         'time_herding': time_herding,
-        'time_thinning': time_thinning
+        'time_thinning': time_thinning,
+        'time_thinning_rff': time_thinning_rff
     }
     
     os.makedirs(f"{args.path_to_save}", exist_ok=True)
