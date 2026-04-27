@@ -1,2 +1,0 @@
-dataset,task_id,coreset_size,backward_thinning,fast_backward,full,random,nystroem,herding,thinning,thinning_rff,time_coreset,time_nystroem,time_herding,time_thinning,time_thinning_rff
-mfeat-factors,12,500,0.78,0.781,0.85,0.82,0.85,0.777,0.827,0.827,0.16992282401770353,0.5446443690161686,0.08434342002146877,0.015107425017049536,2.1510172869893722

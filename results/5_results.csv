@@ -1,2 +1,0 @@
-dataset,task_id,coreset_size,backward_thinning,fast_backward,full,random,nystroem,herding,thinning,thinning_rff,time_coreset,time_nystroem,time_herding,time_thinning,time_thinning_rff
-mfeat-fourier,14,500,0.814,0.816,0.843,0.819,0.84,0.819,0.816,0.816,0.16819093999220058,0.5871053279843181,0.08337053799186833,0.015703265991760418,2.0820099970151205

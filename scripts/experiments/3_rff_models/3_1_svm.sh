@@ -15,20 +15,17 @@ else
 fi
 
 # 2. Execute
-
-
-task_id=3
-experiment="2_4_backward_thinning"
+experiment="3_1_rff_models"
+target_size_percentage=50
+version="svm_1_flexible/target_size_${target_size_percentage}" #"version_0_percentage_${target_size_percentage}"
 path_to_save="results/$experiment/$version"
 
-target_size_percentage=50
-version="version_0_percentage_${target_size_percentage}"
 
 
 problem_types=("classification" "regression")
 #problem_types=("regression")  # Solo regresión para este experimento
 
-for task_id in {11..15}; do
+for task_id in {1..40}; do
     for problem_type in "${problem_types[@]}"; do
         echo "🚀 Running task_id: $task_id, problem_type: $problem_type..."
         args=(
@@ -42,6 +39,6 @@ for task_id in {11..15}; do
         # Note: Removed --experiment because your help output shows 
         # that the script doesn't actually accept a --experiment flag.
 
-        python -m experiments.2_weighted_backward_thinning.2_4_backward_thinning "${args[@]}"
+        python -m experiments.3_rff_models.3_1_svm "${args[@]}"
     done
 done

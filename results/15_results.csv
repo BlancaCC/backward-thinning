@@ -1,2 +1,0 @@
-dataset,task_id,coreset_size,backward_thinning,fast_backward,full,random,nystroem,herding,thinning,thinning_rff,time_coreset,time_nystroem,time_herding,time_thinning,time_thinning_rff
-diabetes,37,192,0.7734375,0.7708333333333334,0.765625,0.7473958333333334,0.7630208333333334,0.7734375,0.765625,0.765625,0.0210574819939211,0.7512011810031254,0.06832213699817657,0.03538541798479855,1.1189702660194598

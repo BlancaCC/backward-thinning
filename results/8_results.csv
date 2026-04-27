@@ -1,2 +1,0 @@
-dataset,task_id,coreset_size,backward_thinning,fast_backward,full,random,nystroem,herding,thinning,thinning_rff,time_coreset,time_nystroem,time_herding,time_thinning,time_thinning_rff
-mfeat-morphological,18,500,0.409,0.41,0.437,0.423,0.437,0.412,0.397,0.397,0.08935202599968761,0.6661779650021344,0.06333194000762887,0.013149944978067651,1.9440813190012705
