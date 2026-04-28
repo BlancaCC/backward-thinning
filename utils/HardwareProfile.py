@@ -38,9 +38,10 @@ class HardwareProfiler:
                 papi_low.library_init()
                 self._evs = papi_low.create_eventset()
                 # PAPI_DP_OPS counts double precision floating point operations
-                papi_low.add_event(self._evs, events.PAPI_DP_OPS)
+                papi_low.add_event(self._evs, events.PAPI_TOT_INS)
                 self._papi_supported = True
-            except Exception:
+            except Exception as e:
+                print(f"[DEBUG] PAPI Error: {e}")
                 self._papi_supported = False
 
     def __enter__(self) -> "HardwareProfiler":

@@ -1,8 +1,4 @@
-from .BackwardThinning import BackwardThinning
-from .WeightedBackwardThinning import WeightedBackwardThinning
-from .IterativeWeightedBackwardThinning import IterativeWeightedBackwardThinning
 from .KernelHerding import KernelHerding
-from .KernelThinning import KernelThinning
 from .FastBackwardThinning import FastBackwardThinning
-from .KernelThinningRFF import KernelThinningRFF, make_rff, make_gaussian_kernel
+from .utils import make_gaussian_kernel
 from .FlexibleKernelThinning import FlexibleKernelThinning
