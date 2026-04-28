@@ -204,14 +204,12 @@ def main():
     }
     
     final_path = os.path.join(args.path_to_save, args.problem_type)
+    save_path = os.path.join(final_path, 'gp')
     os.makedirs(final_path, exist_ok=True)
     file_name = f"{args.task_id}_results.csv"
     
-    # Asegúrate de que save_data_to_csv maneje la creación del archivo
-    save_path = os.path.join(final_path)
-
     save_data_to_csv(directory_path=save_path, file_name=file_name, data=results)
-    print(f"Resultados guardados en {save_path}/{file_name}")
+    print(f"Resultados guardados en {save_path}/gp/{file_name}")
 
 if __name__ == "__main__":
     main()
